@@ -1,0 +1,2 @@
+#!/bin/sh
+gdb lua -x 'lua-gdb.gdb' -ex 'set args -llui -e"lui.init()" -i'

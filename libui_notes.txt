@@ -1,0 +1,24 @@
+libui notes
+
+- must call uiInit() before anything else
+- set up all your stuff, then call uiMain() to start app (or loop uiMainStep() until it returns 0)
+- uiQuit() terminates uiMain() loop
+- call uiUninit() before app termination
+
+- so the call order is:
+	uiInit()
+	... create widgets
+	uiMain()
+	uiQuit()
+	uiUninit()
+
+- uiControlHandle(), uiControlSetparent(), uiControlParent(), uiAllocControl(), uiFreeControl(), uiControlVerifySetParent(), uiControlEnabledToUser(), uiUserBug*() are not intended for client use
+	- uiControlParent() may be useful because a control can't be deallocated if it still is attached to a parent
+- uiControlDestroy() on containers destroys all children
+- uiWindowOnClosing: return 1 to destroy window after callback, 0 to not do that
+- must create menu before(!) creating the window that uses the menu.
+- uiMenuAppendCheckItem() -> onclick method called after checked status changed!
+- uiMenuItem, uiMenu is not a uiControl!
+- neither are uiDrawBrush, uiDrawStrokeParams, uiDrawMatrix, uiDrawPath, uiDrawTextLayout, uiContext
+- uiContext need not be free()d, it is created temporarily
+- container widgets destroy their children when they are destroyed

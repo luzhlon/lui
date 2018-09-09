@@ -1,0 +1,264 @@
+#!/usr/bin/env lua
+
+function message(msg, ...)
+	io.stderr:write(string.format(msg .. "\n", ...))
+end
+
+function error(msg, ...)
+	message("error: " .. msg, ...)
+	return nil
+end
+
+function fatal(msg, ...)
+	message("fatal: " .. msg, ...)
+	os.exit(1)
+end
+
+if arg[1] == "-h" or arg[1] == "--help" or #arg < 1 then
+	message("Usage: %s file1 [file2...] > output.md", arg[0])
+	os.exit(1)
+end
+
+function basename(name)
+	name = string.match(name, "([^/]+)$")
+	name = string.match(name, "^([^.]+)")
+	return name
+end
+
+function read_one_block(fn, tbl, i)
+	local what = string.match(tbl[i], "^%s*/?%*%*%*%s+(%S+)%s*$")
+	if what == nil then
+		return error("invalid syntax in file %s line %s", fn, i)
+	end
+	what = string.lower(what)
+	i = i + 1
+	local res = {}
+	while (not string.match(tbl[i], "^%s*%*%*%*")) and (not string.match(tbl[i], "^%s*%*/")) do
+		local k, v = string.match(tbl[i], "^%s*%*%s*(%w+):%s*(%S.*)%s*$")
+		if k then
+			res[string.lower(k)] = v
+		else
+			local v = string.match(tbl[i], "^%s*%*%s*(%S.*)%s*$")
+			if v then
+				res['desc'] = (res['desc'] and (res['desc'] .. " ") or "") .. v
+			end
+		end
+		i = i + 1
+	end
+	return what, res, i
+end
+
+function read_file(name)
+	local tbl = {}
+	local file, err
+	if name == "-" then
+		file = io.stdin
+	else
+		file, err = io.open(name, "r")
+		if err then error(err) end
+	end
+	for l in file:lines() do
+		tbl[#tbl+1] = l
+	end
+	if name ~= "-" then
+		file:close()
+	end
+	return tbl
+end
+
+function collect_data(filename, res)
+	local f = read_file(filename)
+
+	res = res or {}
+	local module = basename(filename)
+	local l = 1
+	while l <= #f do
+		if (string.match(f[l], "^%s*/?%*%*%* ")) then
+			local what, tbl, nl = read_one_block(filename, f, l)
+			if what == "module" then
+				module = tbl.name
+				if tbl.desc then
+					res[module] = res[module] or {}
+					res[module].desc = tbl.desc
+				end
+			elseif what == "intro" then
+				if tbl.desc then
+					res[1] = tbl.desc
+				end
+			else
+				res[module] = res[module] or {}
+				if tbl.object then
+					res[module].object = res[module].object or {}
+					t = nil
+					for _, o in ipairs(res[module].object) do
+						if o.name == tbl.object then
+							t = o
+						end
+					end
+					if not t then
+						t = { object = { name = tbl.object } }
+						res[module].object[#res[module].object + 1] = t
+					end
+					tbl.object = nil
+					t[what] = t[what] or {}
+					t[what][#t[what] + 1] = tbl
+				else
+					res[module][what] = res[module][what] or {}
+					t = res[module][what]
+					t[#t+1] = tbl
+				end
+			end
+			l = nl
+		else
+			l = l + 1
+		end
+	end
+	return res
+end
+
+
+function outf(str, ...)
+	print(string.format(str, ...))
+end
+
+function output_functions(func)
+	if not func then return end
+	outf("<h2 id=\"functions\">Functions</h2>")
+	for _, f in ipairs(func) do
+		outf("<h3 id=\"func_%s\">%s</h3>", f.name, f.name)
+		outf("<code>%s</code>", f.signature)
+		if f.desc then outf("<p>%s</p>", f.desc) end
+	end
+end
+
+function output_objects(obj)
+	if not obj then return end
+	outf("<h2 id=\"objects\">Objects</h2>")
+	for _, o in ipairs(obj) do
+		outf("<h3 id=\"obj_%s\">%s</h3>", o.name, o.name)
+		if o.desc then outf("<p>%s</p>", o.desc) end
+		if o.constructor then
+			outf("<h4>Constructors</h4>")
+			outf("<dl>")
+			for _, c in ipairs(o.constructor) do
+				outf("<dt>%s</dt>", c.name)
+				outf("<dd><code>%s</code>", c.signature)
+				if c.desc then outf("<br/>%s", c.desc) end
+				outf("</dd>")
+			end
+			outf("</dl>")
+		end
+		if o.property then
+			outf("<h4>Properties</h4>")
+			outf("<dl>")
+			for _, p in ipairs(o.property) do
+				outf("<dt>%s</dt>", p.name)
+				if p.desc then outf("<dd>%s</dd>", p.desc) end
+			end
+			outf("</dl>")
+		end
+		if o.method then
+			outf("<h4>Methods</h4>")
+			outf("<dl>")
+			for _, m in ipairs(o.method) do
+				outf("<dt>%s</dt>", m.name)
+				outf("<dd><code>%s</code>", m.signature)
+				if m.desc then outf("<br/>%s", m.desc) end
+				outf("</dd>")
+			end
+			outf("</dl>")
+		end
+	end
+end
+
+function sorted_keys(tbl)
+	local res = {}
+	for k, _ in pairs(tbl) do
+		if type(k) == "string" then
+			res[#res+1] = k
+		end
+	end
+	table.sort(res)
+	return res
+end
+
+function output_toc(modules)
+	local ind = " "
+	outf("<h1>Table of contents</h1>\n")
+	outf("<ul class=\"toc\">")
+	for _, mod in ipairs(sorted_keys(modules)) do
+		desc = modules[mod]
+		outf("<li><a href=\"#mod_%s\">Module %s</a>", mod, mod)
+		outf("<ul>")
+		if desc["function"] then
+			outf("<li><a href=\"#functions\">Functions</a>")
+			outf("<ul>")
+			for _, f in ipairs(desc['function']) do
+				outf("<li><a href=\"#func_%s\">%s</a>", f.name, f.name)
+			end
+			outf("</ul></li>")
+		end
+		if desc["object"] then
+			outf("<li><a href=\"#objects\">Objects</a>")
+			outf("<ul>")
+			for _, f in ipairs(desc['object']) do
+				outf("<li><a href=\"#obj_%s\">%s</a>", f.name, f.name)
+			end
+			outf("</ul></li>")
+		end
+		outf("</ul></li>")
+	end
+	outf("</ul>\n")
+end
+
+function output_stylesheet()
+	outf[[<style type="text/css">
+		body { font-family: sans; font-size: 12pt; margin-left: 50pt; }
+		h4 { color: #666; font-size: 14pt; font-weight: bolder; margin-left: -20pt; }
+		h3 { color: #666; font-size: 16pt; font-weight: bolder; margin-left: -30pt; }
+		h2 { color: #666; font-size: 18pt; font-weight: bolder; margin-left: -40pt; }
+		h1 { color: #666; font-size: 20pt; font-weight: bolder; margin-left: -50pt; }
+		h1.title { color: #666; font-size: 24pt; }
+		dt { color: #444; font-family: monospace; font-weight: bolder; }
+		ul.toc { margin-left: -10pt; }
+		ul.toc a { color: #444; text-decoration: none; }
+		ul.toc a:hover { color: #000; text-decoration: underline; }
+	</style>]]
+end
+
+function output(modules, title)
+	outf("<html><head><title>%s</title>", title)
+	output_stylesheet()
+	outf("</head><body>")
+	if title then
+		outf("<h1 class=\"title\">%s</h1>", title)
+	end
+	if modules[1] then
+		outf("<p>%s</p>", modules[1])
+	end
+	output_toc(modules)
+	for _, mod in ipairs(sorted_keys(modules)) do
+		desc = modules[mod]
+		outf("<h1 id=\"mod_%s\">Module %s</h1>", mod, mod)
+		if desc.desc then
+			outf("<p>%s</p>", desc.desc)
+		end
+		output_functions(desc['function'])
+		output_objects(desc['object'])
+	end
+	outf("</body></html>")
+end
+
+modules = {}
+for i = 2, #arg do
+	modules = collect_data(arg[i], modules)
+end
+for mname, module in pairs(modules) do
+	if type(module) == "table" then
+		for lname, list in pairs(module) do
+			table.sort(list, function(e1, e2) return e1.name < e2.name end)
+		end
+	end
+end
+
+output(modules, arg[1])

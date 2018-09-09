@@ -1,0 +1,7 @@
+# README #
+
+## lui ##
+
+This is a binding of libui (https://github.com/andlabs/libui) to lua. It is almost complete (as of 01.07.2017, master branch), but still early in development and very much in flux. As is libui. All of libui is linked together with the lua specific stuff into one module, so that you need only one dynamic library. Currently only lua 5.3 and linux are supported, work will continue to support lua down to 5.1, and also Windows and Mac OS X, and to keep up with new libui features. Also, luarocks.
+
+The module is currently built using a Makefile. You will need git to fetch a recent version of libui. A simple `make` should build the module lui.so, a `make doc` will create a html documentation file for the module.
