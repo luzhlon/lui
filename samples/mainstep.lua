@@ -1,5 +1,4 @@
--- qrun.vim@nlua:
--- require "testing_c_path"
+require "testing_c_path"
 lui = require "lui"
 
 lui.init()

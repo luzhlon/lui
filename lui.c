@@ -15,7 +15,7 @@ const int LUI_DEFAULT_WINDOW_HEIGHT = 600;
  */
 
 /*** Intro
- * lui is a cross platform gui library for lua, basically a wrapper for libui (https://github.com/andlabs/libui).
+ * lui is a cross platform gui library for lua, basically a souped up wrapper for libui (https://github.com/andlabs/libui).
  */
 
 #include <stdlib.h>
@@ -1097,11 +1097,7 @@ static const struct luaL_Reg lui_funcs [] ={
  * 
  * open and initialize this library
  */
-#if _WIN32
-int __declspec(dllexport) luaopen_lui(lua_State *L)
-#else
 int luaopen_lui(lua_State *L)
-#endif
 {
 	/* exported function table. Create a metatable with a __gc field in order
 	 * to ensure that on lua closedown lui_finalize() gets called.

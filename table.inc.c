@@ -1,4 +1,10 @@
-/* uiImage ******************************************************************/
+/* uiTableModel *************************************************************/
+
+/*** Object
+ * Name: tablemodel
+ * a tablemodel provided the data to a table. Communication happens through
+ * callback functions.
+ */
 
 /* TODO L should really be a void* (userdata) associated with the model,
  * instead of the modelhandler. Check if (when) this will be implemented
@@ -32,19 +38,51 @@ static const luaL_Reg lui_tablemodel_meta[] = {
 	{0, 0}
 };
 
+/*** Method
+ * Object: tablemodel
+ * Name: row_inserted
+ * Signature: mdl:row_inserted(rownumber)
+ * signals to any connected table that a row has been inserted into the data
+ * represented by the table model.
+ */
 static int lui_tablemodel_row_inserted(lua_State *L)
 {
-	NOT_IMPLEMENTED
+	lui_object *lobj = lui_checkTableModel(L, 1);
+	int row = lua_tointeger(L, 2);
+	uiTableModelRowInserted(uiTableModel(lobj->object), row);
+	return 0;
 }
 
+/*** Method
+ * Object: tablemodel
+ * Name: row_changed
+ * Signature: mdl:row_changed(rownumber)
+ * signals to any connected table that a row has been changed in the data
+ * represented by the table model. You need to only call this when the data
+ * is changed by the program, if it has been changed by editing a cell in
+ * the table control, you do not need to signal this to the table.
+ */
 static int lui_tablemodel_row_changed(lua_State *L)
 {
-	NOT_IMPLEMENTED
+	lui_object *lobj = lui_checkTableModel(L, 1);
+	int row = lua_tointeger(L, 2);
+	uiTableModelRowChanged(uiTableModel(lobj->object), row);
+	return 0;
 }
 
+/*** Method
+ * Object: tablemodel
+ * Name: row_deleted
+ * Signature: mdl:row_deleted(rownumber)
+ * signals to any connected table that a row has been deleted from the data
+ * represented by the table model.
+ */
 static int lui_tablemodel_row_deleted(lua_State *L)
 {
-	NOT_IMPLEMENTED
+	lui_object *lobj = lui_checkTableModel(L, 1);
+	int row = lua_tointeger(L, 2);
+	uiTableModelRowDeleted(uiTableModel(lobj->object), row);
+	return 0;
 }
 
 /* methods for tablemodel */
@@ -97,6 +135,18 @@ static int lui_tablemodelhandler_numcolumns(uiTableModelHandler *tmh, uiTableMod
 {
 	lua_State *L = ((struct myUiTableModelHandler*)tmh)->L;
 	if (lui_findhandler(L, tm, "numcolumns")) {
+		lua_call(L, 0, 1);
+		int res = lua_tointeger(L, -1);
+		lua_pop(L, 1);
+		return res;
+	}
+	return 0;
+}
+
+static int lui_tablemodelhandler_numrows(uiTableModelHandler *tmh, uiTableModel *tm)
+{
+	lua_State *L = ((struct myUiTableModelHandler*)tmh)->L;
+	if (lui_findhandler(L, tm, "numrows")) {
 		lua_call(L, 0, 1);
 		int res = lua_tointeger(L, -1);
 		lua_pop(L, 1);
@@ -182,18 +232,6 @@ static uiTableValueType lui_tablemodelhandler_columntype(uiTableModelHandler *tm
 			break;
 	}
 	return res;
-}
-
-static int lui_tablemodelhandler_numrows(uiTableModelHandler *tmh, uiTableModel *tm)
-{
-	lua_State *L = ((struct myUiTableModelHandler*)tmh)->L;
-	if (lui_findhandler(L, tm, "numrows")) {
-		lua_call(L, 0, 1);
-		int res = lua_tointeger(L, -1);
-		lua_pop(L, 1);
-		return res;
-	}
-	return 0;
 }
 
 static uiTableValue *lui_tablemodel_totablevaluestring(lua_State *L, int pos)
@@ -347,10 +385,35 @@ static int lui_checkHandlerTable(lua_State *L, int pos)
 	return 1;
 }
 
+/*** Constructor
+ * Object: tablemodel
+ * Name: tablemodel
+ * signature: mdl = lui.tablemodel( handlerfuncs )
+ * creates a new table model. handlerfuncs is a table with 5 named entries,
+ * which are user supplied functions the table uses to get and set data from
+ * the model. These functions are:
+ *
+ *	numcolumns()
+ * 		must return the number of columns in the data
+ *	numrows()
+ *		must return the number of rows in the data
+ *	columntype(col)
+ *		must return the type of data in column col. Valid return values are
+ *		string, integer, boolean, image and color. All values that have a
+ *		textual representation in a cell must be returned as string, the
+ *		other types are only valid for special column types. Note that the
+ *		type for a column must remain fixed throughout the tabemoodels life
+ *		time. Your function is most probably only called once.
+ *	cellvalue(row, col)
+ *		must return the data in row, col. The data must correspond to the
+ *		type returned by columntype for this column, except in the case of
+ *		string. Anything will be converted to it's string representation
+ *		for string type columns.
+ *	setcellvalue(row, col, val)
+ *		must set the data in row, col to value val.
+ */
 static int lui_newTableModel(lua_State *L)
 {
-	int nargs = lua_gettop(L);
-
 	struct myUiTableModelHandler *tmh = calloc(1, sizeof(struct myUiTableModelHandler));
 	tmh->handler.NumColumns = lui_tablemodelhandler_numcolumns;
 	tmh->handler.ColumnType = lui_tablemodelhandler_columntype;
@@ -368,10 +431,6 @@ static int lui_newTableModel(lua_State *L)
 	// TODO what about tmh?
 	lua_pushvalue(L, 1);
 	lua_setfield(L, -2, "handler");
-	if (nargs > 1) {
-		lua_pushvalue(L, 2);
-		lua_setfield(L, -2, "data");
-	}
 	lua_pop(L, 1);
 
 	lui_registerTableModel(L, lua_gettop(L));
@@ -379,16 +438,28 @@ static int lui_newTableModel(lua_State *L)
 	return  1;
 }
 
+/* uiTable ******************************************************************/
+
+/*** Object
+ * Name: table
+ */
+
 #define uiTable(this) ((uiTable *) (this))
 #define LUI_TABLE "lui_table"
 #define lui_pushTable(L) lui_pushObject(L, LUI_TABLE, 1)
 #define lui_checkTable(L, pos) ((lui_object*)luaL_checkudata(L, pos, LUI_TABLE))
 
-// uiTableAppendTextColumn() appends a text column to t.
-// name is displayed in the table header.
-// textModelColumn is where the text comes from.
-// If a row is editable according to textEditableModelColumn,
-// SetCellValue() is called with textModelColumn as the column.
+/*** Method
+ * Object: table
+ * Name: appendtextcolumn
+ * Signature: tbl:appendtextcolumn(name, datacolumn, editable = false, textcolorcolumn = nil)
+ * appends a text column to a table. name is displayed as the column header.
+ * datacolumn is the column from the underlying datamodel, where the text
+ * comes from. If a row is editable according to the editable parameter,
+ * SetCellValue() is called with datacolumn as the column. If the
+ * textcolorcolumn argument is ~= nil, it is a column that must hold a
+ * color value which is to be used for the text color for this column.
+ */
 static int lui_table_appendtextcolumn(lua_State *L)
 {
 	lui_object *lobj = lui_checkTable(L, 1);
@@ -401,9 +472,14 @@ static int lui_table_appendtextcolumn(lua_State *L)
 	return 0;
 }
 
-// uiTableAppendImageColumn() appends an image column to t.
-// Images are drawn at icon size, appropriate to the pixel density
-// of the screen showing the uiTable.
+/*** Method
+ * Object: table
+ * Name: appendimagecolumn
+ * Signature: tbl:appendimagecolumn(name, datacolumn)
+ * appends an image column to a table. name is displayed as the column
+ * header. datacolumn is the column from the data model that must hold an
+ * image object to be displayed in this column.
+ */
 static int lui_table_appendimagecolumn(lua_State *L)
 {
 	lui_object *lobj = lui_checkTable(L, 1);
@@ -413,8 +489,19 @@ static int lui_table_appendimagecolumn(lua_State *L)
 	return 0;
 }
 
-// uiTableAppendImageTextColumn() appends a column to t that
-// shows both an image and text.
+/*** Method
+ * Object: table
+ * Name: appendimagetextcolumn
+ * Signature: tbl:appendimagetextcolumn(name, icolumn, tcolumn, editable = false, textcolorcolumn = nil)
+ * appends a column to a table that displays both an image and a text. 
+ * name is displayed as the column header. icolumn is the column from the
+ * datamodel that must hold an image object to be displayed in this column.
+ * tcolumn  is the column from the underlying datamodel, where the text
+ * comes from. If a row is editable according to the editable parameter,
+ * SetCellValue() is called with datacolumn as the column. If the
+ * textcolorcolumn argument is ~= nil, it is a column that must hold a
+ * color value which is to be used for the text color for this column.
+ */
 static int lui_table_appendimagetextcolumn(lua_State *L)
 {
 	lui_object *lobj = lui_checkTable(L, 1);
@@ -428,10 +515,17 @@ static int lui_table_appendimagetextcolumn(lua_State *L)
 	return 0;
 }
 
-// uiTableAppendCheckboxColumn appends a column to t that
-// contains a checkbox that the user can interact with (assuming the
-// checkbox is editable). SetCellValue() will be called with
-// checkboxModelColumn as the column in this case.
+/*** Method
+ * Object: table
+ * Name: appendcheckboxcolumn
+ * Signature: tbl:appendcheckboxcolumn(name, datacolumn, editable)
+ * appends a column that contains a checkbox. name is displayed as the
+ * column header. datacolumn is the column from the datamodel that holds the
+ * data for this checkbox. The data in this column must be either an integer
+ * with values 0 or 1, or a boolean. If editable is true, this checkbox can
+ * be interacted with, and setcellvalue() will be called with datamodelcolumn
+ * as the column in this case.
+ */
 static int lui_table_appendcheckboxcolumn(lua_State *L)
 {
 	lui_object *lobj = lui_checkTable(L, 1);
@@ -442,8 +536,18 @@ static int lui_table_appendcheckboxcolumn(lua_State *L)
 	return 0;
 }
 
-// uiTableAppendCheckboxTextColumn() appends a column to t
-// that contains both a checkbox and text.
+/*** Method
+ * Object: table
+ * Name: appendcheckboxtextcolumn
+ * Signature: tbl:appendcheckboxtextcolumn(name, ccolumn, ceditable, tcolumn, teditable = false, textcolorcolumn = nil)
+ * appends a column that contains both a checkbox and text. ccolumn is
+ * the data column for the checkbox, ceditable is the flag whether the
+ * checkbox can be interacted with. tcolumn and teditable are the same for
+ * the text, and textcolurcolumn is the optional column for the text
+ * foreground color. The checkbox arguments work as they do for the
+ * appendcheckboxcolumn() method, the text arguments work as they do for the
+ * appendtextcolumn() method.
+ */
 static int lui_table_appendcheckboxtextcolumn(lua_State *L)
 {
 	lui_object *lobj = lui_checkTable(L, 1);
@@ -458,10 +562,15 @@ static int lui_table_appendcheckboxtextcolumn(lua_State *L)
 	return 0;
 }
 
-// uiTableAppendProgressBarColumn() appends a column to t
-// that displays a progress bar. These columns work like
-// uiProgressBar: a cell value of 0..100 displays that percentage, and
-// a cell value of -1 displays an indeterminate progress bar.
+/*** Method
+ * Object: table
+ * Name: appendprogressbarcolumn
+ * Signature: tbl:appendprogressbarcolumn(name, column)
+ * appends a column that displays a progress bar. These columns work
+ * like lui.progressBar: a cell value of 0..100 displays that percentage,
+ * and a cell value of -1 displays an indeterminate progress bar. The data
+ * type to use for this column is integer.
+ */
 static int lui_table_appendprogressbarcolumn(lua_State *L)
 {
 	lui_object *lobj = lui_checkTable(L, 1);
@@ -471,12 +580,15 @@ static int lui_table_appendprogressbarcolumn(lua_State *L)
 	return 0;
 }
 
-// uiTableAppendButtonColumn() appends a column to t
-// that shows a button that the user can click on. When the user
-// does click on the button, SetCellValue() is called with a NULL
-// value and buttonModelColumn as the column.
-// CellValue() on buttonModelColumn should return the text to show
-// in the button.
+/*** Method
+ * Object: table
+ * Name: appendbuttoncolumn
+ * Signature: tbl:appendbuttoncolumn(name, datacolumn, clickable = false)
+ * appends a column that shows a button that the user can click on. When
+ * the user does click on the button, SetCellValue() is called with a nil
+ * value and datacolumn as the column. cellvalue() on datacolumn should
+ * return the text to show in the button.
+ */
 static int lui_table_appendbuttoncolumn(lua_State *L)
 {
 	lui_object *lobj = lui_checkTable(L, 1);
@@ -499,6 +611,11 @@ static const luaL_Reg lui_table_methods[] = {
 	{0, 0}
 };
 
+/*** Constructor
+ * Object: table
+ * Name: table
+ * TODO
+ */
 static int lui_newTable(lua_State *L)
 {
 	lui_object *lmodel = lui_checkTableModel(L, 1);

@@ -56,8 +56,8 @@ static const luaL_Reg lui_image_methods[] = {
 };
 
 /*** Constructor
- * Object: new
- * Name: new
+ * Object: image
+ * Name: image
  * Signature: image = lui.image(width, height)
  * create a new, empty image object. width and height are the respective
  * sizes of the image in points. Typically this is the size in pixels.
@@ -73,7 +73,7 @@ static int lui_newImage(lua_State *L)
 }
 
 /*** Constructor
- * Object: loadimage
+ * Object: image
  * Name: loadimage
  * Signature: image = lui.loadimage(filename)
  * create a new image object by loading it from a file. Width and height are
